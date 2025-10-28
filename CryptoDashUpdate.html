@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CryptoDash — Single File App</title>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#94a3b8;
+      --good:#22c55e; --bad:#ef4444; color-scheme:dark;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#061021 0%, #081226 100%);
+      color:#e6eef6;min-height:100vh;
+    }
+    .wrap{max-width:1100px;margin:18px auto;padding:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:16px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,.6);}
+
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+    .brand{display:flex;gap:12px;align-items:center}
+    .title{font-size:20px;font-weight:700}
+    .sub{color:var(--muted);font-size:13px}
+    .btn{background:var(--accent);border:none;color:#012;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+    .btn-red{background:var(--bad);color:#fff}
+    .muted{color:var(--muted)}
+    .cols{display:grid;grid-template-columns:1fr 420px;gap:18px;margin-top:12px}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.03)}
+    .stock-row{display:flex;gap:8px;align-items:center}
+    input[type=number], input[type=text], input[type=password]{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
+    .small{font-size:13px}
+    .center{text-align:center}
+    .grid-charts{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:12px}
+    canvas{background:transparent;border-radius:6px}
+    .leaderboard{margin-top:12px}
+    .link{color:var(--accent);cursor:pointer;text-decoration:underline}
+    /* simple responsive */
+    @media (max-width:920px){ .cols{grid-template-columns:1fr} .grid-charts{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="title">CryptoDash</div>
+        <div class="sub">Simulated trading — demo for ATL showcase</div>
+      </div>
+      <div id="topControls"></div>
+    </header>
+
+    <!-- AUTH / APP VIEWS -->
+    <div id="viewAuth" class="card" style="max-width:420px;margin:auto;">
+      <h3 id="authTitle">Login to CryptoDash</h3>
+      <div style="margin-top:8px">
+        <input id="inUser" type="text" placeholder="Username" style="width:100%" /><br><br>
+        <input id="inPass" type="password" placeholder="Password" style="width:100%" /><br><br>
+        <button id="authButton" class="btn" style="width:100%">Login</button>
+        <p class="muted center" style="margin-top:10px;">
+          <span id="authToggle">Don't have an account? <span class="link" id="linkSignup">Sign up</span></span>
+        </p>
+      </div>
+      <p class="muted small center" style="margin-top:8px">All data is stored locally in your browser (localStorage).</p>
+    </div>
+
+    <div id="viewApp" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <div>
+            <div style="font-weight:700" id="welcomeUser">Welcome, User</div>
+            <div class="sub">Start/Current coins: <strong id="startCoinsText">10,000</strong></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn" id="btnLeaderboard">Leaderboard</button>
+            <button class="btn" id="btnPortfolio">My Portfolio</button>
+            <button class="btn btn-red" id="btnLogout">Logout</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="cols">
+        <!-- LEFT: Stocks + Charts -->
+        <div>
+          <div class="card" style="margin-bottom:12px">
+            <h3>Available Stocks (prices in ₹)</h3>
+            <p class="muted small">Conversion: <strong>1 ₹ = 1 coin</strong>. Prices auto-increase by ₹1 every minute.</p>
+            <table>
+              <thead><tr><th>Symbol</th><th>Company</th><th>Price</th><th>Buy / Sell</th></tr></thead>
+              <tbody id="stocksTable"></tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h4>Mini Charts (live)</h4>
+            <div class="grid-charts" id="chartsWrap"></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Account / Portfolio / Leaderboard -->
+        <div>
+          <div class="card">
+            <h3>Account</h3>
+            <p><strong>Coins:</strong> <span id="coinsText">10000</span></p>
+            <p class="small muted">Buy and sell to change your balance. Coins and portfolio are saved to your account locally.</p>
+            <div style="margin-top:12px">
+              <button class="btn" onclick="resetAccount()">Reset Account</button>
+            </div>
+            <p class="small" style="margin-top:10px">
+              <strong>Profit / Loss:</strong>
+              <span id="profit" style="color:var(--accent)">₹ 0.00</span>
+            </p>
+          </div>
+
+          <div class="card" style="margin-top:12px">
+            <h4>Portfolio</h4>
+            <div id="portfolioList" class="muted small">No stocks owned yet.</div>
+          </div>
+
+          <div class="card leaderboard" id="leaderboardCard" style="margin-top:12px;display:none">
+            <h4>Leaderboard (local users)</h4>
+            <div id="leaderboardList" class="muted small"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer style="margin-top:18px;text-align:center;color:var(--muted);font-size:13px">
+      Demo for ATL showcase — single-file app. Prices seeded from a fixed close and move +₹1 per minute.
+    </footer>
+  </div>
+
+  <script>
+  /*********************
+   * Single-file CryptoDash
+   * - Login / Signup (localStorage)
+   * - Dashboard with buy/sell
+   * - Mini live charts (Chart.js)
+   * - Prices increase ₹1 every minute and charts update
+   * - Leaderboard (local users sorted by coins)
+   *********************/
+
+  // -------------------------
+  // Utilities
+  // -------------------------
+  function $(id){ return document.getElementById(id); }
+  function format(n){ return Number(n).toLocaleString('en-IN', {maximumFractionDigits:2}); }
+
+  // -------------------------
+  // Stock data (seeded with close-like prices)
+  // -------------------------
+  const stocks = [
+    {symbol:'RELIANCE', name:'Reliance Industries', price:1482.60, history:[]},
+    {symbol:'TCS', name:'Tata Consultancy Services', price:3085.30, history:[]},
+    {symbol:'INFY', name:'Infosys', price:1505.20, history:[]},
+    {symbol:'SBIN', name:'State Bank of India', price:916.15, history:[]},
+  ];
+
+  // prepare short history seed (5 points) for charts
+  stocks.forEach(s=>{
+    // create 5 close-ish values ending at s.price
+    const base = s.price - 4;
+    s.history = [base, base+1, base+2, base+3, s.price].map(v => Math.round(v));
+  });
+
+  // charts container
+  const charts = {}; // symbol -> Chart instance
+
+  // -------------------------
+  // Auth & user storage
+  // -------------------------
+  // users structure in localStorage: { username: { password: '...', coins: number, portfolio: {symbol:qty,...} } }
+  function getUsers(){ return JSON.parse(localStorage.getItem('cd_users') || '{}'); }
+  function setUsers(u){ localStorage.setItem('cd_users', JSON.stringify(u)); }
+  function getCurrentUser(){ return localStorage.getItem('cd_currentUser'); }
+  function setCurrentUser(name){ if(name) localStorage.setItem('cd_currentUser', name); else localStorage.removeItem('cd_currentUser'); }
+
+  // initial demo users (only if storage empty) — helps leaderboard for showcase
+  (function seedDemoUsers(){
+    const existing = getUsers();
+    if(Object.keys(existing).length === 0){
+      existing['alice'] = { password:'alice123', coins:12000, portfolio:{} };
+      existing['bob']   = { password:'bob123', coins:9000,   portfolio:{} };
+      existing['carol'] = { password:'carol123', coins:15000, portfolio:{} };
+      setUsers(existing);
+    }
+  })();
+
+  // -------------------------
+  // DOM elements & view logic
+  // -------------------------
+  const viewAuth = $('viewAuth');
+  const viewApp = $('viewApp');
+  const authTitle = $('authTitle');
+  const authButton = $('authButton');
+  const authToggle = $('authToggle');
+  const inUser = $('inUser');
+  const inPass = $('inPass');
+
+  let isSignup = false; // auth mode
+
+  function showAuth(){
+    viewApp.style.display = 'none';
+    viewAuth.style.display = 'block';
+    authTitle.textContent = isSignup ? 'Create an account' : 'Login to CryptoDash';
+    authButton.textContent = isSignup ? 'Sign Up' : 'Login';
+    authToggle.innerHTML = isSignup ? 'Already have account? <span class="link" id="linkLogin">Login</span>' : 'Don\'t have an account? <span class="link" id="linkSignup">Sign up</span>';
+    attachAuthLinks();
+  }
+
+  function attachAuthLinks(){
+    const l1 = document.getElementById('linkSignup');
+    if(l1) l1.onclick = ()=>{ isSignup=true; showAuth(); };
+    const l2 = document.getElementById('linkLogin');
+    if(l2) l2.onclick = ()=>{ isSignup=false; showAuth(); };
+  }
+
+  authButton.addEventListener('click', handleAuth);
+
+  function handleAuth(){
+    const user = inUser.value.trim();
+    const pass = inPass.value.trim();
+    if(!user || !pass) return alert('Enter username & password');
+
+    const users = getUsers();
+
+    if(isSignup){
+      if(users[user]) return alert('User exists — choose different username');
+      users[user] = { password: pass, coins: 10000, portfolio: {} };
+      setUsers(users);
+      alert('Signup done — please login');
+      isSignup = false;
+      inPass.value = ''; inUser.value = '';
+      showAuth();
+      return;
+    } else {
+      if(!users[user] || users[user].password !== pass) return alert('Invalid login');
+      setCurrentUser(user);
+      inUser.value = ''; inPass.value = '';
+      openApp();
+    }
+  }
+
+  // -------------------------
+  // App state for logged in user
+  // -------------------------
+  let currentUser = null;
+  let coins = 10000;
+  let portfolio = {}; // symbol -> qty
+  let STARTING_COINS = 10000;
+
+  function openApp(){
+    viewAuth.style.display = 'none';
+    viewApp.style.display = 'block';
+    currentUser = getCurrentUser();
+    if(!currentUser) { showAuth(); return; }
+    const users = getUsers();
+    const u = users[currentUser];
+    coins = u?.coins ?? 10000;
+    portfolio = u?.portfolio ?? {};
+    STARTING_COINS = 10000; // consistent baseline for P/L display
+    $('welcomeUser').innerText = `Welcome, ${currentUser}`;
+    $('startCoinsText').innerText = format(STARTING_COINS);
+    updateAccountUI();
+    renderStocks();
+    renderCharts();
+    renderLeaderboard(); // prepare leaderboard data
+    $('leaderboardCard').style.display = 'none';
+    // show top controls
+    $('topControls').innerHTML = `<span class="sub">User: <strong>${currentUser}</strong></span>`;
+  }
+
+  // logout
+  $('btnLogout').addEventListener('click', ()=>{
+    setCurrentUser(null);
+    location.reload();
+  });
+
+  // -------------------------
+  // Save user state
+  // -------------------------
+  function saveUserState(){
+    const users = getUsers();
+    if(!currentUser) return;
+    users[currentUser] = users[currentUser] || { password: '', coins: 10000, portfolio: {} };
+    users[currentUser].coins = coins;
+    users[currentUser].portfolio = portfolio;
+    setUsers(users);
+    renderLeaderboard();
+  }
+
+  // -------------------------
+  // Stocks rendering & buy/sell
+  // -------------------------
+  function renderStocks(){
+    const tbody = $('stocksTable');
+    tbody.innerHTML = '';
+    stocks.forEach((s, idx)=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="width:90px">${s.symbol}</td>
+        <td>${s.name}</td>
+        <td>₹ <strong>${format(s.price)}</strong></td>
+        <td>
+          <div class="stock-row">
+            <input id="qty_${idx}" type="number" min="1" value="1" style="width:80px" />
+            <div>
+              <button class="btn" onclick="buy(${idx})">Buy</button>
+              <button class="btn" onclick="sell(${idx})">Sell</button>
+            </div>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+    updateAccountUI(); // update coins display & portfolio
+  }
+
+  function buy(idx){
+    const qEl = $('qty_'+idx);
+    const qty = Math.max(1, Math.floor(Number(qEl.value) || 1));
+    const cost = qty * stocks[idx].price;
+    if(cost > coins) return alert('Not enough coins.');
+    coins -= cost;
+    portfolio[stocks[idx].symbol] = (portfolio[stocks[idx].symbol]||0) + qty;
+    updateAccountUI();
+    saveUserState();
+    alert(`Bought ${qty} of ${stocks[idx].symbol} for ₹${format(cost)}`);
+  }
+
+  function sell(idx){
+    const qEl = $('qty_'+idx);
+    const qty = Math.max(1, Math.floor(Number(qEl.value) || 1));
+    const owned = portfolio[stocks[idx].symbol]||0;
+    if(qty > owned) return alert(`You only own ${owned} shares.`);
+    const proceeds = qty * stocks[idx].price;
+    coins += proceeds;
+    portfolio[stocks[idx].symbol] = owned - qty;
+    if(portfolio[stocks[idx].symbol] === 0) delete portfolio[stocks[idx].symbol];
+    updateAccountUI();
+    saveUserState();
+    alert(`Sold ${qty} of ${stocks[idx].symbol} for ₹${format(proceeds)}`);
+  }
+
+  function updateAccountUI(){
+    $('coinsText').innerText = format(coins);
+    $('startCoinsText').innerText = format(STARTING_COINS);
+    // portfolio listing
+    const lines = [];
+    let portValue = 0;
+    for(const sym in portfolio){
+      const qty = portfolio[sym];
+      const s = stocks.find(x=>x.symbol===sym);
+      const val = (s?.price || 0) * qty;
+      portValue += val;
+      lines.push(`${sym} — ${qty} shares (₹ ${format(val)})`);
+    }
+    $('portfolioList').innerText = lines.length ? lines.join('\n') : 'No stocks owned yet.';
+    // profit / loss
+    const total = coins + portValue;
+    const profit = total - STARTING_COINS;
+    const profitEl = $('profit');
+    profitEl.innerText = `₹ ${format(profit)}`;
+    profitEl.style.color = profit >= 0 ? 'var(--good)' : 'var(--bad)';
+  }
+
+  function resetAccount(){
+    if(!confirm('Reset account? This will set coins to 10000 and clear portfolio.')) return;
+    coins = 10000;
+    portfolio = {};
+    updateAccountUI();
+    saveUserState();
+  }
+
+  // -------------------------
+  // Leaderboard
+  // -------------------------
+  $('btnLeaderboard').addEventListener('click', ()=>{
+    const show = $('leaderboardCard').style.display === 'none';
+    $('leaderboardCard').style.display = show ? 'block' : 'none';
+    if(show) renderLeaderboard();
+  });
+
+  function renderLeaderboard(){
+    const users = getUsers();
+    const list = [];
+    for(const name in users){
+      const u = users[name];
+      // compute portfolio value with current prices (best-effort)
+      let portVal = 0;
+      for(const sym in (u.portfolio||{})){
+        const qty = u.portfolio[sym];
+        const s = stocks.find(x=>x.symbol===sym);
+        portVal += (s?.price || 0) * qty;
+      }
+      const total = (u.coins || 0) + portVal;
+      list.push({name, coins:u.coins||0, total});
+    }
+    list.sort((a,b)=>b.total - a.total);
+    const el = $('leaderboardList');
+    if(list.length === 0) { el.innerText = 'No users yet'; return; }
+    el.innerHTML = list.map((u, i)=>`${i+1}. <strong>${u.name}</strong> — ₹ ${format(u.total || u.coins)}`).join('<br>');
+  }
+
+  // -------------------------
+  // Charts
+  // -------------------------
+  function renderCharts(){
+    const wrap = $('chartsWrap');
+    wrap.innerHTML = '';
+    stocks.forEach((s, idx)=>{
+      const box = document.createElement('div');
+      box.style.padding = '8px';
+      box.className = 'card';
+      box.innerHTML = `<div style="font-weight:700">${s.symbol}</div><canvas id="c_${s.symbol}" height="120"></canvas>`;
+      wrap.appendChild(box);
+
+      const ctx = document.getElementById(`c_${s.symbol}`).getContext('2d');
+      const data = {
+        labels: s.history.map((_,i)=>`t-${s.history.length-i}`),
+        datasets: [{ label: s.symbol, data: s.history.slice(), tension:0.35, borderWidth:2, pointRadius:0 }]
+      };
+      const cfg = {
+        type:'line',
+        data,
+        options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:false,ticks:{maxTicksLimit:5}}},elements:{point:{radius:0}}}
+      };
+      charts[s.symbol] = new Chart(ctx, cfg);
+    });
+  }
+
+  // push latest value to chart and keep last 12 points
+  function pushChartPoint(symbol, value){
+    const chart = charts[symbol];
+    if(!chart) return;
+    chart.data.labels.push('');
+    chart.data.datasets[0].data.push(Math.round(value));
+    if(chart.data.datasets[0].data.length > 12){
+      chart.data.datasets[0].data.shift();
+      chart.data.labels.shift();
+    }
+    chart.update();
+  }
+
+  // -------------------------
+  // Price tick: +₹1 every minute
+  // Also update charts with new point
+  // -------------------------
+  function tickPrices(){
+    stocks.forEach(s=>{
+      s.price += 1; // +₹1
+      // update history & charts
+      s.history.push(Math.round(s.price));
+      if(s.history.length > 12) s.history.shift();
+      pushChartPoint(s.symbol, s.price);
+    });
+    // re-render the stock table (refresh displayed prices)
+    renderStocks();
+    // leaderboard needs refresh because values changed
+    renderLeaderboard();
+    // persist new prices? For demo we keep them in-memory only (page session)
+  }
+
+  // start the 1-minute interval (also call once after load to ensure chart shows current)
+  setInterval(tickPrices, 60000);
+  // also update every time page loads quickly to reflect recent start (no auto call now)
+  // But we call tickPrices after a short timeout to add initial chart points (after charts init)
+  setTimeout(()=>{ /* push current prices once into charts so last point equals current */ stocks.forEach(s=>pushChartPoint(s.symbol, s.price)); }, 400);
+
+  // -------------------------
+  // Initialize app view
+  // -------------------------
+  // If already logged in, open app, else auth view
+  if(getCurrentUser()){
+    openApp();
+  } else {
+    showAuth();
+  }
+
+  // Expose buy/sell functions to inline onclicks
+  window.buy = buy;
+  window.sell = sell;
+
+  // Save state periodically (every 10s) so balances persist during demo
+  setInterval(saveUserState, 10000);
+
+  </script>
+</body>
+</html>
